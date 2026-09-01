@@ -1,0 +1,11 @@
+# Example fleet-pulse config. Copy to config.yaml and adjust, or point
+# --config directly at a file like this one. Any field left out keeps its
+# default (see internal/config/config.go's Default()).
+
+# How often the agent polls host vitals in stdout mode (--listen unset).
+# Ignored once /metrics is being served, since that mode reads live on
+# every scrape instead of on a fixed interval.
+interval: 5s
+
+# Address /metrics is served on. Leave blank (or omit) for stdout mode.
+listen: ":9090"
