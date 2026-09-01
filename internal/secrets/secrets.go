@@ -25,10 +25,10 @@ func LoadIdentity(path string) (age.Identity, error) {
 
 	ids, err := age.ParseIdentities(f)
 	if err != nil {
-		return nil, fmt.Errorf("secrets: parsing identity file %s: %w", path, err)
+		return nil, fmt.Errorf("parsing identity file %s: %w", path, err)
 	}
 	if len(ids) == 0 {
-		return nil, fmt.Errorf("secrets: no identities found in %s", path)
+		return nil, fmt.Errorf("no identities found in %s", path)
 	}
 	return ids[0], nil
 }
@@ -45,7 +45,7 @@ func DecryptBearerToken(path string, identity age.Identity) (string, error) {
 
 	r, err := age.Decrypt(f, identity)
 	if err != nil {
-		return "", fmt.Errorf("secrets: decrypting %s: %w", path, err)
+		return "", fmt.Errorf("decrypting %s: %w", path, err)
 	}
 
 	data, err := io.ReadAll(r)
