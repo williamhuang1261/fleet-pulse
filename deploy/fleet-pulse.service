@@ -1,0 +1,23 @@
+[Unit]
+Description=fleet-pulse host metrics agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/fleet-pulse/fleet-pulse --config /etc/fleet-pulse/config.yaml
+Restart=on-failure
+RestartSec=5s
+
+User=fleet-pulse
+Group=fleet-pulse
+
+# Hardening: no privilege escalation, read-only root, no access to other
+# users' home directories. The binary only needs to read its own config,
+# secrets and identity files under /etc/fleet-pulse.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadOnlyPaths=/etc/fleet-pulse
+
+[Install]
+WantedBy=multi-user.target
