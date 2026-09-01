@@ -1,4 +1,5 @@
 /fleet-pulse
 /dist/
 *.age
+key.txt
 .env

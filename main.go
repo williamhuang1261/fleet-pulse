@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/williamhuang1261/fleet-pulse/internal/config"
 	"github.com/williamhuang1261/fleet-pulse/internal/metrics"
+	"github.com/williamhuang1261/fleet-pulse/internal/secrets"
 )
 
 func main() {
@@ -23,6 +24,8 @@ func main() {
 	interval := flag.Duration("interval", 5*time.Second, "how often to poll host vitals in stdout mode")
 	listen := flag.String("listen", "", "if set, serve Prometheus metrics on this address (e.g. :9090) instead of printing to stdout")
 	configPath := flag.String("config", "", "path to a YAML config file; explicit flags still override its values")
+	secretsFile := flag.String("secrets-file", "", "path to an age-encrypted file holding the /metrics bearer token; unset leaves /metrics open")
+	identityFile := flag.String("identity-file", "", "path to the age identity (private key) that decrypts --secrets-file; required if --secrets-file is set")
 	flag.Parse()
 
 	cfg := config.Default()
@@ -50,7 +53,25 @@ func main() {
 	collector := metrics.NewCollector()
 
 	if cfg.Listen != "" {
-		runServer(collector, cfg.Listen)
+		var bearerToken string
+		if *secretsFile != "" {
+			if *identityFile == "" {
+				fmt.Fprintln(os.Stderr, "--secrets-file requires --identity-file")
+				os.Exit(1)
+			}
+			identity, err := secrets.LoadIdentity(*identityFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "identity: %v\n", err)
+				os.Exit(1)
+			}
+			token, err := secrets.DecryptBearerToken(*secretsFile, identity)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "secrets: %v\n", err)
+				os.Exit(1)
+			}
+			bearerToken = token
+		}
+		runServer(collector, cfg.Listen, bearerToken)
 		return
 	}
 
@@ -80,13 +101,24 @@ func main() {
 	}
 }
 
-// runServer blocks, serving Prometheus-format host metrics at /metrics.
-func runServer(collector *metrics.Collector, addr string) {
+// runServer blocks, serving Prometheus-format host metrics at /metrics. If
+// bearerToken is non-empty, /metrics requires an "Authorization: Bearer
+// <bearerToken>" header; empty leaves the endpoint open, a documented
+// default for a trusted internal network.
+func runServer(collector *metrics.Collector, addr, bearerToken string) {
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(metrics.NewExporter(collector))
 
+	var metricsHandler http.Handler = promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
+	if bearerToken != "" {
+		metricsHandler = secrets.RequireBearerToken(bearerToken, metricsHandler)
+		log.Print("fleet-pulse: /metrics is gated by a bearer token")
+	} else {
+		log.Print("fleet-pulse: /metrics is open (no --secrets-file set)")
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{}))
+	mux.Handle("/metrics", metricsHandler)
 
 	log.Printf("fleet-pulse: serving /metrics on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {
